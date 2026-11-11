@@ -1,0 +1,1702 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DialTunes - An Old Way to Play</title>
+<style>
+  :root {
+    /* Dark Mode — the app's default. Page background (--bg) and the shell
+       gradient vars (--body-hi/--body-lo, set per shell color in JS) aside,
+       everything below is specifically the LCD screen's own theme, toggled
+       via Settings > Display and applied as [data-theme] on <html>. */
+    --bg: #0f0f10;
+    --body-hi: #f4f4f6;
+    --body-lo: #cfd1d6;
+    --screen: #1e1f22;
+    --screen-text: #e8e9ec;
+    --screen-dim: #7a7d85;
+    --screen-head-hi: #3c3f46;
+    --screen-head-lo: #2a2c31;
+    --divider: #2c2e33;
+    --battery: #aeb2ba;
+    --track-bg: rgba(255,255,255,.25);
+    --track-fill: #ffffff;
+    --np-sub: rgba(255,255,255,.45);
+    --sel: #3b6fd1;
+    --wheel-hi: #ffffff;
+    --wheel-lo: #e4e6ea;
+    --label: #8c9099;
+    --err: #ff8a80;
+  }
+  :root[data-theme="light"] {
+    /* --bg intentionally not overridden here — the page background behind
+       the iPod stays dark regardless of the screen's own Light/Dark Mode. */
+    --screen: #eceef1;
+    --screen-text: #1c1d20;
+    --screen-dim: #6b6e76;
+    --screen-head-hi: #ffffff;
+    --screen-head-lo: #e3e4e8;
+    --divider: #d7d8dc;
+    --battery: #8a8d94;
+    --track-bg: rgba(0,0,0,.15);
+    --track-fill: #1c1d20;
+    --np-sub: rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; }
+  /* min-height:100% (percentage) doesn't reliably give body a definite
+     height from html for `justify-content: center` to actually center
+     within — html's own min-height:100% doesn't establish a used height
+     that percentages on body can resolve against, so body just shrinks to
+     its content and sits flush at the top regardless. 100vh sidesteps that
+     chain entirely by resolving directly against the viewport. */
+  html, body { min-height: 100vh; margin: 0; }
+  body {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 0;
+    gap: 32px;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .ipod {
+    position: relative;
+    --w: min(300px, 86vw);             /* screen scale — frozen, keeps the LCD pixel-identical */
+    --sw: calc(var(--w) - 44px);       /* screen width, same value the old 22px side padding gave */
+    --bw: calc(var(--sw) * 53 / 41);   /* body width: screen is 410/530 of body width in the reference photo */
+    --bh: calc(var(--bw) * 874 / 530); /* body height: reference photo's body is 874/530 (h/w) */
+    width: var(--bw);
+    height: var(--bh);
+    background: var(--body-hi);
+    border-radius: 28px;
+    padding: calc(var(--bh) * 0.077) calc((var(--bw) - var(--sw)) / 2) calc(var(--bh) * 0.05);
+    display: flex;
+    flex-direction: column;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,.6),
+      inset 0 -2px 6px rgba(0,0,0,.08),
+      0 24px 50px rgba(0,0,0,.35);
+  }
+
+  .screen {
+    position: relative;
+    flex: none;
+    height: calc(var(--w) * 1.6 * 0.44);
+    display: flex;
+    flex-direction: column;
+    background: var(--screen);
+    border-radius: 6px;
+    border: 3px solid #3a3b3f;
+    box-shadow: 0 1px 0 rgba(255,255,255,.7);
+    overflow: hidden;
+    color: var(--screen-text);
+    font-size: 15px;
+  }
+  /* Now Playing art-tint: the gradient itself is set inline (color comes from
+     the album art), this just lets it show through the header bar too. */
+  .screen.np-tint { color: #e8e9ec; } /* overrides the inherited --screen-text for every descendant that doesn't set its own color (e.g. #title, .np-title, .np-state) */
+  .screen.np-tint .screen-head { background: transparent; }
+  .screen.np-tint .screen-head::after { border-bottom-color: rgba(255,255,255,.15); }
+  .screen.np-tint .battery { border-color: #aeb2ba; }
+  .screen.np-tint .battery::after { background: #aeb2ba; }
+  .screen.np-tint .np-time { color: rgba(255,255,255,.7); }
+  .screen-head {
+    position: relative;
+    display: flex; justify-content: space-between; align-items: center;
+    height: calc(var(--w) * 0.09);
+    padding: 0 10px;
+    background: linear-gradient(var(--screen-head-hi), var(--screen-head-lo));
+    font-size: 12px; font-weight: 600; letter-spacing: .3px;
+  }
+  /* Same 1px-inset technique as .list li's divider — a full-width
+     border-bottom here touches .screen's own dark border at both ends and
+     blends into it (notches in the border). */
+  .screen-head::after {
+    content: '';
+    position: absolute;
+    left: 1px; right: 1px; bottom: 0;
+    border-bottom: 1px solid var(--divider);
+  }
+  #title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+  .battery { width: 18px; height: 9px; border: 1px solid var(--battery); border-radius: 2px; position: relative; flex-shrink: 0; margin-left: 8px; }
+  .battery::after { content: ""; position: absolute; inset: 1px 4px 1px 1px; background: var(--battery); border-radius: 1px; }
+  .list { list-style: none; margin: 0; padding: 0; }
+  .list li {
+    position: relative;
+    box-sizing: border-box;
+    height: calc((var(--w) * 1.6 * 0.44 - 6px - var(--w) * 0.09) / 5);
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 12px;
+    font-size: 15px;
+    overflow: hidden;
+  }
+  /* A 1px inset divider rather than a full-width border-bottom — just
+     enough that its ends don't touch .screen's own dark border and blend
+     into it at the pixel level (small notches cut into the border), while
+     still reading as essentially the same full-width line as before. */
+  .list li::after {
+    content: '';
+    position: absolute;
+    left: 1px; right: 1px; bottom: 0;
+    border-bottom: 1px solid var(--divider);
+  }
+  /* The last row's divider sits at the very bottom of #content, flush
+     against .screen's own bottom border — same pixel-blend overlap as the
+     sides, just along the full width instead of two points. Nudged up 1px
+     so it clears that border too. */
+  .list li:last-child::after { bottom: 1px; }
+  /* ::after paints on top of the li's own background, so a selected row's
+     divider cuts a visible line across its own highlight — the highlight
+     already separates it from its neighbors, so it doesn't need one. */
+  .list li.sel::after { display: none; }
+  .list li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .list li.sel { background: var(--sel); color: #fff; }
+  .list li .chev { opacity: .8; font-size: 13px; flex-shrink: 0; margin-left: 8px; }
+  .now { padding: 14px 12px; color: var(--screen-dim); font-size: 13px; line-height: 1.6; }
+  .err { color: var(--err); }
+  .screen-head { flex-shrink: 0; }
+  #content { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+  /* Same look as .np-bar (track/fill colors, 3px thickness), just vertical.
+     Sits within the existing right padding of .list li, so it never covers
+     a row's text or its chevron. Shown only when the list actually
+     overflows (toggled in JS via updateScrollbar()). */
+  .vscroll {
+    position: absolute;
+    /* top/height set in JS from #content's actual rendered box — see
+       updateScrollbar() — rather than a calc() formula duplicating
+       .screen-head's height, which could round to a different subpixel. */
+    right: 2px;
+    width: 3px;
+    background: var(--track-bg);
+    border-radius: 1.5px;
+    display: none;
+    pointer-events: none;
+  }
+  .vscroll.show { display: block; }
+  .vscroll .thumb { position: absolute; left: 0; right: 0; background: var(--track-fill); border-radius: 1.5px; }
+  #content::-webkit-scrollbar { display: none; }
+
+  .np { padding: 20px 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .np-top { display: flex; gap: 10px; align-items: center; }
+  .np-art { width: 72px; height: 72px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: var(--divider); }
+  .np-meta { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .np-title { font-size: 18px; font-weight: 600; overflow: hidden; white-space: nowrap; }
+  .np-title span { display: inline-block; white-space: nowrap; }
+  .np-sub { font-size: 14px; color: var(--np-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .np-bar { height: 4px; background: var(--track-bg); border-radius: 2px; overflow: hidden; margin-top: 16px; }
+  .np-bar div { height: 100%; background: var(--track-fill); }
+  /* Now Playing with album art is always tinted dark (the gradient is
+     deliberately capped dark — see applyNowPlayingTint), regardless of
+     Light/Dark Mode, so its accents stay white-based even in Light Mode. */
+  .screen.np-tint .np-sub { color: rgba(255,255,255,.45); }
+  .screen.np-tint .np-bar { background: rgba(255,255,255,.25); }
+  .screen.np-tint .np-bar div { background: #fff; }
+  .np-time { font-size: 12px; color: var(--screen-dim); display: flex; justify-content: space-between; }
+  .np-state { font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 7px; }
+
+  .wheel-area {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    margin-top: 18px;
+  }
+  .wheel {
+    position: relative;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 35%, var(--wheel-hi), var(--wheel-lo) 85%);
+    box-shadow: inset 0 -2px 4px rgba(0,0,0,.08), 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(0,0,0,.08);
+    touch-action: none;
+    cursor: pointer;
+  }
+  .wheel .lbl {
+    position: absolute;
+    color: var(--label);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .wheel .menu   { top: 18px; left: 50%; transform: translateX(-50%); letter-spacing: .4px; }
+  .wheel .prev   { left: 16px; top: 50%; transform: translateY(-50%); font-size: 14px; }
+  .wheel .next   { right: 16px; top: 50%; transform: translateY(-50%); font-size: 14px; }
+  .wheel .play   { bottom: 16px; left: 50%; transform: translateX(-50%); font-size: 14px; }
+  .center {
+    position: absolute;
+    width: 78px; height: 78px;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: var(--body-hi);
+    box-shadow: inset 0 -2px 3px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.06);
+    cursor: pointer;
+  }
+  .center:active { filter: brightness(0.92); }
+
+  /* Childhood stickers — purely decorative, drawn over the device's plastic
+     body. Sized off --w so they scale with the rest of the chassis. */
+  /* Hidden unless #ipod has .childhood — Apple White is still the default
+     display on load, stickers only show up for Danial's Childhood iPod. */
+  .sticker-ball, .sticker-bridge, .sticker-megalodon, .sticker-hockey { display: none; }
+  .ipod.childhood .sticker-ball { display: block; }
+  .ipod.childhood .sticker-bridge, .ipod.childhood .sticker-megalodon, .ipod.childhood .sticker-hockey { display: block; }
+  .sticker-ball {
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .sticker-bridge {
+    position: absolute;
+    top: 58%; left: 10%;
+    width: calc(var(--w) * 0.3);
+    height: auto;
+    transform: rotate(-45deg);
+    transform-origin: 20% 80%;
+    pointer-events: none;
+  }
+  .sticker-megalodon {
+    position: absolute;
+    bottom: 3%; right: 3%;
+    width: calc(var(--w) * 0.2772);
+    height: auto;
+    pointer-events: none;
+  }
+  .sticker-hockey {
+    position: absolute;
+    bottom: 8px; right: 8px;
+    width: 79.8px;
+    height: auto;
+    pointer-events: none;
+  }
+
+  .footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* Footer text + the shell-color swatches, grouped so the whole page
+     (iPod, footer, swatches) centers in the viewport as one unit. Keeping
+     the swatches out of flow (as this used to) left them uncounted by
+     body's `justify-content: center`, which centered just .ipod + .footer
+     and let the swatches hang below for free — visually, that pushed the
+     whole composition toward the top of the window instead of truly
+     centering it. */
+  .footer-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .shell-picker-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .shell-picker { display: flex; gap: 14px; justify-content: center; }
+  .shell-swatch {
+    position: relative;
+    width: 28px; height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+  }
+  .shell-swatch svg { position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; pointer-events: none; }
+  .shell-swatch.selected { box-shadow: inset 0 0 0 1px rgba(0,0,0,.15), 0 0 0 2px var(--bg), 0 0 0 4px var(--sel); }
+  .shell-color-name { font-size: 11px; color: #8c9099; text-align: center; }
+
+  .hint {
+    text-align: center;
+    color: #8c9099;
+    font-size: 11px;
+  }
+
+  .credit {
+    text-align: center;
+    font-size: 11px;
+    color: #8c9099;
+    line-height: 1.5;
+  }
+  .credit img { height: 14px; vertical-align: middle; margin-left: 4px; }
+
+  /* First-visit acknowledgement — only accounts allowlisted on the Spotify
+     app (just the developer, in this version) can connect, so almost every
+     real visitor needs the demo instead. Shown over everything until
+     explicitly dismissed; no backdrop-click or [x] close, since the point
+     is that someone actually reads it rather than reflexively clearing it. */
+  /* .notice-overlay sets its own `display`, which — being an author-level
+     class rule — would otherwise win over the browser's default [hidden]
+     styling and show the overlay even while the `hidden` attribute is set. */
+  .notice-overlay[hidden] { display: none; }
+  .notice-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 1000;
+  }
+  .notice-card {
+    background: #1c1d20;
+    color: #e8e9ec;
+    border-radius: 14px;
+    max-width: 460px;
+    width: 100%;
+    padding: 22px 22px 18px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.5);
+  }
+  .notice-card h2 { margin: 0 0 10px; font-size: 17px; }
+  .notice-card p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: #c6c8cd; }
+  .notice-card ul { margin: 0 0 16px; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #c6c8cd; }
+  .notice-card .notice-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .notice-card button {
+    flex: 1;
+    min-width: 120px;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .notice-card .notice-primary { background: var(--sel); color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="notice-overlay" id="demoNotice" hidden>
+  <div class="notice-card">
+    <h2>Before you start spinning,</h2>
+    <p>As of right now, Spotify's Developer API limits only allow a small handful of accounts (just my own personal account right now) to log in and access their library. Unfortunately that means you cannot connect your own personal account. If these limits change in the future, the code will be updated accordingly to let my original vision of anyone connecting their own account to work as intended!</p>
+    <p>To test out the functionality of the app, try the Demo!</p>
+    <p><strong>Notable Demo limits</strong></p>
+    <ul>
+      <li>Short song previews (only ~20–30s per track).</li>
+      <li>No skipping forwards or backwards, Spotify doesn't support that for this kind of playback.</li>
+      <li>The available music is a small hand-picked catalog of tracks I have been enjoying recently!</li>
+    </ul>
+    <div class="notice-actions">
+      <button class="notice-primary" id="noticeContinue">Continue</button>
+    </div>
+  </div>
+</div>
+
+<div class="ipod" id="ipod">
+  <img class="sticker-bridge" src="bridge-sticker.svg" alt="">
+  <img class="sticker-megalodon" src="megalodon-sticker.svg" alt="">
+  <img class="sticker-hockey" src="hockey-sticker.svg" alt="">
+  <div class="screen" id="screen">
+    <div class="screen-head">
+      <span id="title">Menu</span>
+      <span class="battery" aria-hidden="true"></span>
+    </div>
+    <div id="content"></div>
+    <div class="vscroll" id="vscroll"><div class="thumb" id="vscrollThumb"></div></div>
+  </div>
+
+  <div class="wheel-area">
+    <div class="wheel" id="wheel" aria-label="Click wheel">
+      <span class="lbl menu" data-act="menu">MENU</span>
+      <span class="lbl prev" data-act="prev" aria-label="Previous">⏮︎</span>
+      <span class="lbl next" data-act="next" aria-label="Next">⏭︎</span>
+      <span class="lbl play" data-act="play" aria-label="Play or pause">▶︎⏸︎</span>
+      <div class="center" id="center" data-act="select" aria-label="Select">
+        <img class="sticker-ball" src="ball-sticker.svg" alt="">
+      </div>
+    </div>
+  </div>
+
+  <!-- Replace the text below with the official Spotify logo file from
+       Spotify's brand guidelines, kept unaltered. -->
+</div>
+
+<!-- Demo mode's Spotify embed widget. Playback only — our own Now Playing
+     screen is what's actually shown, so this stays off-screen. The hiding
+     styles live on this OUTER wrapper, not on #demo-embed itself — Spotify's
+     createController() takes over #demo-embed's own size/style once it
+     initializes (replacing whatever was there), so hiding styles set
+     directly on it don't survive. The wrapper is never touched by Spotify's
+     code, so position:fixed + overflow:hidden here holds regardless of how
+     big a box the widget decides to render inside it. -->
+<div id="demo-embed-wrap" style="position:fixed; left:-9999px; top:-9999px; width:300px; height:152px; overflow:hidden;" aria-hidden="true">
+  <div id="demo-embed"></div>
+</div>
+
+<div class="footer-group">
+  <div class="footer">
+    <div class="hint" id="hint">
+      Drag the click wheel to scroll, press the center button to select, and MENU to go back.
+    </div>
+
+    <div class="credit">
+      Music provided by <strong>Spotify</strong>
+    </div>
+  </div>
+
+  <div class="shell-picker-wrap">
+    <div class="shell-picker" id="shellPicker" aria-label="iPod shell color"></div>
+    <div class="shell-color-name" id="shellColorName"></div>
+  </div>
+</div>
+
+<script>
+// ---------- Config ----------
+// 1. Create an app at developer.spotify.com/dashboard
+// 2. Paste its Client ID below (it is public and safe in HTML; no secret is used)
+// 3. Add this page's exact URL as a Redirect URI in the app settings
+// 4. Add your Spotify account under User Management (development mode)
+const CLIENT_ID = '736d289012154fada2f461c62adef786';
+const REDIRECT_URI = location.origin + location.pathname;
+const SCOPES = [
+  'user-library-read',
+  'user-follow-read',
+  'playlist-read-private',
+  'user-read-private',
+  'user-read-email',
+  'streaming',
+  'user-read-playback-state',
+  'user-modify-playback-state',
+].join(' ');
+const TOKEN_KEY = 'ipod.spotify';
+const DEMO_NOTICE_KEY = 'ipod.demoNoticeAcked';
+
+// ---------- Static menus ----------
+const MAIN = [
+  { label: 'Playlists', to: 'Playlists' },
+  { label: 'Artists', to: 'Artists' },
+  { label: 'Songs', to: 'Songs' },
+  { label: 'Settings', to: 'Settings' },
+];
+
+const SETTINGS = [
+  { label: 'Display', to: 'Display' },
+  { label: 'Clicks', toggle: 'clicks' },
+  { label: 'Shuffle', toggle: 'shuffle' },
+  { label: 'Repeat', toggle: 'repeat' },
+  { label: 'About', to: 'About' },
+  { label: 'Log out', action: () => logout() },
+];
+
+const THEMES = [
+  { label: 'Light Mode', theme: 'light' },
+  { label: 'Dark Mode', theme: 'dark' },
+];
+
+// The iPod shell colors — chosen from the page itself (below the iPod), not
+// from the in-device Settings menu. Each is one base hex; applyShellColor()
+// derives a lighter/darker pair from it (hi for the flat shell/center-button
+// fill, lo kept in reserve) so only one color needs to be specified per shell.
+// `id` is the unique key (selection/storage) — `hex` is just the visual
+// color, which two entries can share (e.g. "Danial's Childhood iPod" is the
+// same hex as "Apple White" but is its own distinct, separately-selectable
+// swatch).
+const SHELL_COLORS = [
+  { id: 'white', label: 'Apple White', hex: '#C9CACE' },
+  { id: 'hazelnut', label: 'Hazelnut', hex: '#6B3E24' },
+  { id: 'blue', label: 'Blue Pea', hex: '#71B4E2' },
+  { id: 'pink', label: 'Molly Tea', hex: '#E280AA' },
+  { id: 'green', label: 'Sencha', hex: '#80C037' },
+  { id: 'childhood', label: "Danial's Childhood iPod", hex: '#C9CACE' },
+];
+
+// ---------- State ----------
+const state = {
+  stack: [{ name: 'main', index: 0 }],
+  index: 0,
+  error: '',
+  settings: { clicks: true, shuffle: false, repeat: false, shellId: 'white', theme: 'dark' },
+};
+
+// Library cache. A key is null until loaded, then an array.
+const cache = { playlists: null, artists: null, tracks: null, trackUris: [] };
+
+// Now playing, filled from the Web Playback SDK
+const np = { active: false, title: '', artist: '', art: '', position: 0, duration: 0, paused: true, source: null };
+
+let tokens = loadTokens();   // { access, refresh, expires }
+let player = null;
+let deviceId = null;
+let sdkReady = false;
+
+// ---------- Demo mode (no login — Spotify embed iFrame API) ----------
+// For visitors who aren't one of the 5 accounts allowlisted on this app
+// (it's in Spotify Development Mode). A set of hardcoded public playlists
+// (and one album), played through Spotify's embed widget instead of the
+// Web Playback SDK, so no OAuth is involved at all.
+const DEMO_PLAYLISTS = [
+  { label: "Today's Top Hits", uri: 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M' },
+  { label: 'Purple Rain', uri: 'spotify:album:2umoqwMrmjBBPeaqgYu6J9' },
+  { label: 'This Is The Strokes', uri: 'spotify:playlist:37i9dQZF1DZ06evO04caZO' },
+  { label: 'autumn vintage jazz', uri: 'spotify:playlist:4qrHzwnOhHzU0YRtnEMSi0' },
+  { label: 'Pumpkin Pureé', uri: 'spotify:playlist:3LqjxEMib6LDf7isU4uFfE' },
+  { label: 'This Is Rihanna', uri: 'spotify:playlist:37i9dQZF1DZ06evO3by276' },
+  { label: 'The Lord of the Rings Full Soundtrack', uri: 'spotify:playlist:1QYWtI88n9ggcyK1I5j2t0' },
+  { label: 'This Is Frank Ocean', uri: 'spotify:playlist:37i9dQZF1DXdyjMX5o2vCq' },
+  { label: 'This Is beabadoobee', uri: 'spotify:playlist:37i9dQZF1DZ06evO1MEzV6' },
+  { label: 'Spider-Verse: The Official Playlist', uri: 'spotify:playlist:37i9dQZF1DWSIXPHRZ4SKc' },
+  { label: 'This Is Michael Jackson', uri: 'spotify:playlist:37i9dQZF1DZ06evO1SVXaM' },
+  { label: 'Early 2010s Nostalgia', uri: 'spotify:playlist:3rV2gyEKHxixpKa3IDQLvF' },
+  { label: 'This is: TDE', uri: 'spotify:playlist:06248ROAp2BclsMjaLdqGa' },
+];
+let demoMode = false;
+let demoController = null;
+let demoApiLoading = null;  // promise, set once the iframe-api script starts loading
+let demoAwaitingReady = false;
+let demoLastUri = null;
+let demoLastPaused = null;
+const demoMetaCache = {};   // track URI -> { title, art } (via Spotify's public oEmbed endpoint)
+
+// ---------- Helpers ----------
+const content = document.getElementById('content');
+const titleEl = document.getElementById('title');
+const screenEl = document.getElementById('screen');
+const ipodEl = document.getElementById('ipod');
+const hintEl = document.getElementById('hint');
+
+// The embed iFrame API has no next/previous-track method at all (see
+// ensureDemoController) — skipping genuinely can't work in demo mode, so
+// visitors are told that up front instead of just finding dead buttons.
+function updateHint() {
+  hintEl.textContent = demoMode
+    ? 'Drag the click wheel to scroll, press the center button to select, and MENU to go back. Spotify disables skipping forward or backward for this demo.'
+    : 'Drag the click wheel to scroll, press the center button to select, and MENU to go back.';
+}
+
+const currentFrame = () => state.stack[state.stack.length - 1];
+const current = () => currentFrame().name;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+}[c]));
+
+function fmt(s) {
+  s = Math.max(0, Math.floor(s));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function setError(msg) {
+  state.error = msg;
+  render();
+}
+
+// ---------- Auth (PKCE: no client secret needed) ----------
+function loadTokens() {
+  try { return JSON.parse(localStorage.getItem(TOKEN_KEY)) || null; } catch { return null; }
+}
+function saveTokens(json) {
+  tokens = {
+    access: json.access_token,
+    refresh: json.refresh_token || tokens?.refresh,
+    expires: Date.now() + json.expires_in * 1000 - 60000,
+  };
+  try { localStorage.setItem(TOKEN_KEY, JSON.stringify(tokens)); } catch {}
+}
+function clearTokens() {
+  tokens = null;
+  try { localStorage.removeItem(TOKEN_KEY); } catch {}
+}
+
+function base64url(buffer) {
+  let str = '';
+  new Uint8Array(buffer).forEach(b => str += String.fromCharCode(b));
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function login() {
+  const bytes = crypto.getRandomValues(new Uint8Array(64));
+  const verifier = base64url(bytes);
+  try { sessionStorage.setItem('ipod.verifier', verifier); } catch {}
+  const challenge = base64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: REDIRECT_URI,
+    scope: SCOPES,
+    code_challenge_method: 'S256',
+    code_challenge: challenge,
+  });
+  location.href = 'https://accounts.spotify.com/authorize?' + params.toString();
+}
+
+async function exchangeCode(code) {
+  const verifier = sessionStorage.getItem('ipod.verifier');
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: REDIRECT_URI,
+    client_id: CLIENT_ID,
+    code_verifier: verifier,
+  });
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!res.ok) throw new Error('token exchange failed');
+  saveTokens(await res.json());
+}
+
+async function refreshAccess() {
+  if (!tokens?.refresh) return false;
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: tokens.refresh,
+    client_id: CLIENT_ID,
+  });
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!res.ok) { clearTokens(); return false; }
+  saveTokens(await res.json());
+  return true;
+}
+
+async function getToken() {
+  if (tokens && Date.now() < tokens.expires) return tokens.access;
+  if (await refreshAccess()) return tokens.access;
+  return null;
+}
+
+// ---------- Spotify Web API ----------
+// Global pacing across every call, not just within one pagination run — if
+// Artists is still mid-pagination when the user flips to Songs, that second
+// burst starts concurrently and compounds against the same shared rate
+// limit unless every request (regardless of source) shares one clock.
+const MIN_API_GAP_MS = 150;
+// A promise chain, not a timestamp — reserving a slot has to be atomic
+// relative to other concurrent callers. A "check the last call time, then
+// wait, then update it" approach races: if two callers both check before
+// either updates (exactly what happens when two screens' pagination runs
+// overlap), they compute the same wait-until time and still fire together.
+// Chaining each reservation onto the previous one is synchronous and can't
+// race, since reading + reassigning `apiSlotChain` happens in one tick.
+let apiSlotChain = Promise.resolve();
+function reserveApiSlot() {
+  const mySlot = apiSlotChain;
+  apiSlotChain = mySlot.then(() => new Promise(r => setTimeout(r, MIN_API_GAP_MS)));
+  return mySlot;
+}
+
+async function api(path, opts = {}, retry = true, rateLimitHits = 0) {
+  await reserveApiSlot();
+
+  const token = await getToken();
+  if (!token) { const e = new Error('not logged in'); e.status = 401; throw e; }
+  const res = await fetch('https://api.spotify.com/v1' + path, {
+    ...opts,
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+  });
+  if (res.status === 401 && retry && await refreshAccess()) return api(path, opts, false);
+  if (res.status === 429 && rateLimitHits < 5) {
+    // Hit Spotify's rate limit. Back off for exactly as long as Spotify asks
+    // (Retry-After, in seconds) and retry, rather than failing outright.
+    // Keeps honoring each fresh Retry-After (up to 5 hits on this one
+    // request) so a transient limit just gets waited out instead of
+    // erroring after a single retry.
+    const retryAfter = parseInt(res.headers.get('Retry-After'), 10);
+    const wait = (Number.isNaN(retryAfter) ? 1 : retryAfter) * 1000;
+    console.warn(`[spotify 429] ${path} — attempt ${rateLimitHits + 1}/5, Retry-After: ${res.headers.get('Retry-After')}s`);
+    await new Promise(r => setTimeout(r, wait));
+    return api(path, opts, retry, rateLimitHits + 1);
+  }
+  if (res.status === 204) return null;
+  if (res.status === 429) console.warn(`[spotify 429] ${path} — giving up after ${rateLimitHits} retries`);
+  if (!res.ok) { const e = new Error('spotify ' + res.status); e.status = res.status; throw e; }
+  return res.json();
+}
+
+function handleApiError(e, what = 'library') {
+  if (e.status === 401) return setError('Session expired. Connect Spotify again.');
+  if (e.status === 403) return setError(what === 'playback'
+    ? 'Playback needs Spotify Premium.'
+    : 'Spotify blocked this. Check that your account is on the app\'s user list.');
+  if (e.status === 404 && what === 'playback') return setError('No active player. Try again.');
+  if (e.status === 429) return setError('Too many requests. Wait a moment.');
+  setError('Could not reach Spotify.');
+}
+
+const loading = {};     // key -> true while the first page is in flight
+const loadingMore = {}; // key -> true while a later page is in flight
+const nextUrls = {};    // key -> URL/cursor for the next page, or null once exhausted
+const totals = {};      // key -> true total item count, from the API's own `total` field
+
+function normalizeNext(next) {
+  if (!next) return null;
+  return next.startsWith('https://api.spotify.com/v1') ? next.slice('https://api.spotify.com/v1'.length) : next;
+}
+
+// Fetches exactly one page for `key` and returns { items, next }. Spotify's
+// rate limit is a rolling 30s window, and development-mode apps additionally
+// have a separate, stricter quota (per Spotify's own docs) — fetching a
+// large library's full page count upfront on first open is exactly the kind
+// of burst that exhausts either one. One page at a time, loaded as the user
+// actually scrolls toward it (see maybeLoadMore below), keeps the request
+// count proportional to how much of the library someone actually looks at.
+async function fetchPage(key, url) {
+  const j = await api(url);
+  if (key === 'playlists') {
+    const items = (j.items || []).filter(Boolean).map(p => ({ label: p.name, play: { context: p.uri } }));
+    return { items, next: normalizeNext(j.next), total: j.total };
+  }
+  if (key === 'artists') {
+    const items = (j.artists.items || []).filter(Boolean).map(a => ({ label: a.name, play: { context: a.uri } }));
+    const after = j.artists.cursors && j.artists.cursors.after;
+    return { items, next: after ? `/me/following?type=artist&limit=50&after=${after}` : null, total: j.artists.total };
+  }
+  // tracks — cache.trackUris is mutated in place (not reassigned), so every
+  // item's play.uris — even ones built on page 1 — shares the one growing
+  // array. Playing an early song still picks up later-loaded songs into its
+  // Spotify playback queue once they load, rather than being frozen to
+  // whatever was fetched at that moment.
+  const tracks = (j.items || []).map(i => i.track).filter(Boolean);
+  const baseIndex = cache.trackUris.length;
+  cache.trackUris.push(...tracks.map(t => t.uri));
+  const items = tracks.map((t, i) => ({ label: t.name, play: { uris: cache.trackUris, offset: baseIndex + i } }));
+  return { items, next: normalizeNext(j.next), total: j.total };
+}
+
+async function loadLibrary(key) {
+  if (!tokens || cache[key] || loading[key]) return;
+  loading[key] = true;
+  if (key === 'tracks') cache.trackUris = [];
+  try {
+    const firstUrl = key === 'playlists' ? '/me/playlists?limit=50'
+      : key === 'artists' ? '/me/following?type=artist&limit=50'
+      : '/me/tracks?limit=50';
+    const page = await fetchPage(key, firstUrl);
+    cache[key] = page.items; // non-null now — libraryItems() stops showing "Loading…"
+    nextUrls[key] = page.next;
+    totals[key] = page.total; // true total count, straight from Spotify — see updateScrollbar()
+  } catch (e) {
+    cache[key] = [];
+    handleApiError(e);
+  }
+  loading[key] = false;
+  render();
+}
+
+// Called on every render of a library screen; fetches the next page once
+// the selection is within PRELOAD_ROWS of the end of what's loaded so far,
+// so scrolling stays smooth without ever fetching more than is being looked at.
+const PRELOAD_ROWS = 5;
+
+function keyForScreen(name) {
+  return name === 'Playlists' ? 'playlists' : name === 'Artists' ? 'artists' : name === 'Songs' ? 'tracks' : null;
+}
+
+function maybeLoadMore(name) {
+  const key = keyForScreen(name);
+  if (!key || !nextUrls[key] || loadingMore[key]) return;
+  const items = itemsOf(name);
+  if (state.index < items.length - PRELOAD_ROWS) return;
+  loadingMore[key] = true;
+  fetchPage(key, nextUrls[key]).then(page => {
+    cache[key].push(...page.items);
+    nextUrls[key] = page.next;
+    totals[key] = page.total;
+    loadingMore[key] = false;
+    render();
+  }).catch(e => {
+    loadingMore[key] = false;
+    handleApiError(e);
+  });
+}
+
+// ---------- Web Playback SDK (the iPod itself becomes a Spotify device) ----------
+window.onSpotifyWebPlaybackSDKReady = () => { sdkReady = true; initPlayer(); };
+
+function initPlayer() {
+  if (!sdkReady || !tokens || player) return;
+  player = new Spotify.Player({
+    name: 'Click Wheel iPod',
+    getOAuthToken: cb => getToken().then(t => cb(t)),
+    volume: 0.6,
+  });
+
+  player.addListener('ready', ({ device_id }) => { deviceId = device_id; });
+  player.addListener('not_ready', () => { deviceId = null; });
+  player.addListener('initialization_error', ({ message }) => setError('Player failed to start: ' + message));
+  player.addListener('authentication_error', () => setError('Spotify login expired. Connect again.'));
+  player.addListener('account_error', () => setError('Playback needs Spotify Premium.'));
+  player.addListener('playback_error', ({ message }) => setError('Playback error: ' + message));
+
+  player.addListener('player_state_changed', s => {
+    if (!s) { np.paused = true; return render(); }
+    const t = s.track_window.current_track;
+    Object.assign(np, {
+      active: true,
+      title: t.name,
+      artist: t.artists.map(a => a.name).join(', '),
+      art: t.album.images[0]?.url || '',
+      position: s.position / 1000,
+      duration: s.duration / 1000,
+      paused: s.paused,
+    });
+    render();
+  });
+
+  player.connect();
+}
+
+async function playSpec(spec) {
+  if (spec.demo) return playDemoUri(spec.uri);
+  if (!deviceId) return setError('Player is starting up. Try again in a moment.');
+  // Liked Songs' spec.uris is the whole (and still-growing, see fetchPage)
+  // trackUris array — for a large library that can run to thousands of
+  // entries, well past Spotify's undocumented but very real practical cap
+  // on how many URIs /me/player/play will accept in one request. Windowing
+  // to 100 tracks starting at the tapped one keeps every request small and
+  // safely under that limit, at the cost of the queue no longer reaching
+  // all the way to the end of a huge library.
+  const body = spec.context
+    ? { context_uri: spec.context }
+    : { uris: spec.uris.slice(spec.offset, spec.offset + 100), offset: { position: 0 } };
+  try {
+    await api(`/me/player/play?device_id=${encodeURIComponent(deviceId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    state.error = '';
+    await syncModes();
+    if (current() !== 'NowPlaying') go('NowPlaying');
+  } catch (e) {
+    handleApiError(e, 'playback');
+  }
+}
+
+// Push the Shuffle and Repeat settings to Spotify
+async function syncModes() {
+  if (!deviceId) return;
+  const d = encodeURIComponent(deviceId);
+  try {
+    await api(`/me/player/shuffle?state=${!!state.settings.shuffle}&device_id=${d}`, { method: 'PUT' });
+    await api(`/me/player/repeat?state=${state.settings.repeat ? 'context' : 'off'}&device_id=${d}`, { method: 'PUT' });
+  } catch {}
+}
+
+function playerCall(fn) {
+  if (!player) return;
+  fn().catch(() => {});
+}
+
+function demoCall(fn) {
+  if (!demoController) return;
+  try { fn(); } catch {}
+}
+
+// Loads Spotify's embed iFrame API script once and resolves with the
+// IFrameAPI object it hands back via the window.onSpotifyIframeApiReady
+// global callback.
+function loadEmbedApiScript() {
+  if (demoApiLoading) return demoApiLoading;
+  demoApiLoading = new Promise((resolve, reject) => {
+    window.onSpotifyIframeApiReady = IFrameAPI => resolve(IFrameAPI);
+    const s = document.createElement('script');
+    s.src = 'https://open.spotify.com/embed/iframe-api/v1';
+    s.async = true;
+    s.onerror = () => reject(new Error('embed api failed to load'));
+    document.body.appendChild(s);
+  });
+  return demoApiLoading;
+}
+
+// Creates the (hidden) embed controller once. Resolves immediately on
+// later calls once it already exists.
+function ensureDemoController() {
+  if (demoController) return Promise.resolve(demoController);
+  return loadEmbedApiScript().then(IFrameAPI => new Promise(resolve => {
+    const options = { uri: DEMO_PLAYLISTS[0].uri, width: '300', height: '152' };
+    IFrameAPI.createController(document.getElementById('demo-embed'), options, ctrl => {
+      demoController = ctrl;
+      // createController() generates its iframe with loading="lazy". That's
+      // fine for a normally-placed embed, but ours sits at -9999px inside
+      // #demo-embed-wrap specifically so it's never visible — which also
+      // means it's never near the viewport, so native lazy-loading would
+      // never actually fetch it. Force it to load eagerly instead.
+      const iframe = document.querySelector('#demo-embed-wrap iframe');
+      if (iframe) iframe.removeAttribute('loading');
+      // loadUri() resets the controller and fires 'ready' again — play()
+      // only runs once that lands, instead of racing the reset.
+      ctrl.addListener('ready', () => {
+        if (demoAwaitingReady) { demoAwaitingReady = false; demoController.play(); }
+      });
+      ctrl.addListener('playback_update', onDemoPlaybackUpdate);
+      resolve(ctrl);
+    });
+  }));
+}
+
+async function startDemo() {
+  demoMode = true;
+  updateHint();
+  try {
+    await ensureDemoController();
+    go('Playlists');
+  } catch {
+    demoMode = false;
+    updateHint();
+    setError('Could not load the Spotify demo player.');
+  }
+}
+
+function exitDemo() {
+  demoMode = false;
+  updateHint();
+  if (demoController) { try { demoController.destroy(); } catch {} demoController = null; }
+  demoApiLoading = null;
+  demoLastUri = null;
+  demoLastPaused = null;
+  Object.assign(np, { active: false, paused: true, source: null });
+  state.stack = [{ name: 'main', index: 0 }];
+  state.index = 0;
+  state.error = '';
+  render();
+}
+
+async function playDemoUri(uri) {
+  try {
+    await ensureDemoController();
+  } catch {
+    return setError('Could not load the Spotify demo player.');
+  }
+  demoAwaitingReady = true;
+  demoController.loadUri(uri);
+  go('NowPlaying');
+}
+
+// The embed API's playback_update gives position/duration/paused but never
+// a track title or artist — fetched separately via fetchDemoMeta() below.
+// Title + art come from Spotify's public oEmbed endpoint (CORS-friendly,
+// built for exactly this). Artist isn't in that response at all, so it
+// comes from our own /api/track-meta serverless function instead, which
+// scrapes it server-side from Spotify's public track page (no CORS access
+// to that page from the browser directly). Run in parallel; either can
+// fail independently without blocking the other.
+async function fetchDemoMeta(uri) {
+  if (demoMetaCache[uri]) return demoMetaCache[uri];
+  const m = uri.match(/^spotify:track:([A-Za-z0-9]+)$/);
+  if (!m) return null;
+  const id = m[1];
+  const [oembedResult, artistResult] = await Promise.allSettled([
+    fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent('https://open.spotify.com/track/' + id)}`)
+      .then(res => res.ok ? res.json() : null),
+    fetch(`/api/track-meta?id=${id}`).then(res => res.ok ? res.json() : null),
+  ]);
+  const o = oembedResult.status === 'fulfilled' ? oembedResult.value : null;
+  if (!o) return null;
+  const a = artistResult.status === 'fulfilled' ? artistResult.value : null;
+  const meta = { title: o.title || 'Spotify', artist: (a && a.artist) || '', art: o.thumbnail_url || '' };
+  demoMetaCache[uri] = meta;
+  return meta;
+}
+
+function onDemoPlaybackUpdate(e) {
+  const d = e.data || {};
+  const trackChanged = !!d.playingURI && d.playingURI !== demoLastUri;
+  const pausedChanged = demoLastPaused !== null && !!d.isPaused !== demoLastPaused;
+
+  np.active = true;
+  np.paused = !!d.isPaused;
+  demoLastPaused = np.paused;
+  np.position = (d.position || 0) / 1000;
+  // Spotify's embed widget briefly reports a stale/placeholder duration
+  // right after a track loads, before correcting it once buffering
+  // settles — skip updating while buffering so the progress bar doesn't
+  // visibly jump partway through a track.
+  if (!d.isBuffering) np.duration = (d.duration || 0) / 1000;
+
+  if (trackChanged) {
+    demoLastUri = d.playingURI;
+    np.title = 'Loading…';
+    np.artist = '';
+    np.art = '';
+    fetchDemoMeta(d.playingURI).then(meta => {
+      if (!meta || demoLastUri !== d.playingURI) return;
+      np.title = meta.title;
+      np.artist = meta.artist;
+      np.art = meta.art;
+      if (current() === 'NowPlaying') render();
+    });
+  }
+
+  if (current() !== 'NowPlaying') return;
+  if (trackChanged || pausedChanged) render();
+  else updateProgress();
+}
+
+function logout() {
+  clearTokens();
+  cache.playlists = cache.artists = cache.tracks = null;
+  cache.trackUris = [];
+  Object.assign(np, { active: false, paused: true, source: null });
+  if (player) { player.disconnect(); player = null; deviceId = null; }
+  state.stack = [{ name: 'main', index: 0 }];
+  state.index = 0;
+  state.error = '';
+  render();
+}
+
+// ---------- Menus ----------
+function libraryItems(key) {
+  if (!tokens) return [{ label: 'Connect Spotify', action: () => login() }];
+  if (!cache[key]) return [{ label: 'Loading…' }];
+  return cache[key];
+}
+
+function itemsOf(name) {
+  switch (name) {
+    case 'main':
+      return [
+        ...(np.active ? [{ label: 'Now Playing', to: 'NowPlaying' }] : []),
+        ...(!tokens && !demoMode ? [{ label: 'Try the Demo', action: () => startDemo() }] : []),
+        ...MAIN,
+      ];
+    // Liked Songs is always first, ahead of the user's own playlists, once
+    // connected — but a disconnected user should see only the "Connect
+    // Spotify" prompt, same as Artists/Songs, not a mix of a real nav item
+    // and the prompt. Demo mode (also logged out) swaps that prompt for the
+    // two hardcoded demo playlists instead.
+    case 'Playlists':
+      if (demoMode && !tokens) {
+        return DEMO_PLAYLISTS.map(p => ({ label: p.label, play: { demo: true, uri: p.uri } }));
+      }
+      return tokens
+        ? [{ label: 'Liked Songs', to: 'Songs' }, ...libraryItems('playlists')]
+        : libraryItems('playlists');
+    case 'Artists':   return libraryItems('artists');
+    case 'Songs':     return libraryItems('tracks');
+    case 'Settings': {
+      // Shuffle/Repeat and Log out don't apply in demo mode — the embed
+      // API has no shuffle/repeat controls, and there's no session to log
+      // out of. "Exit Demo" / "Connect Spotify" replace "Log out" instead.
+      const base = SETTINGS.filter(item =>
+        item.label !== 'Log out' && !(demoMode && (item.toggle === 'shuffle' || item.toggle === 'repeat'))
+      );
+      if (tokens) return [...base, { label: 'Log out', action: () => logout() }];
+      if (demoMode) return [...base, { label: 'Exit Demo', action: () => exitDemo() }, { label: 'Connect Spotify', action: () => login() }];
+      return [...base, { label: 'Connect Spotify', action: () => login() }];
+    }
+    case 'Display': return THEMES;
+    default:          return [];
+  }
+}
+
+function titleOf(name) {
+  if (name === 'NowPlaying') return np.source || 'Now Playing';
+  return {
+    main: 'Menu', Playlists: 'Playlists', Artists: 'Artists', Songs: 'Liked Songs',
+    Settings: 'Settings', Display: 'Display', About: 'About',
+  }[name] || 'Menu';
+}
+
+// ---------- Render ----------
+function errorHtml() {
+  return state.error ? `<div class="now err">${esc(state.error)}</div>` : '';
+}
+
+// Vertical scroll indicator — same colors/thickness as .np-bar, just
+// rotated. Only ever shown where it's actually needed: Now Playing never
+// scrolls, the main menu always fits, and every other screen only shows it
+// once its list genuinely overflows the visible 5 rows.
+const vscrollEl = document.getElementById('vscroll');
+const vscrollThumb = document.getElementById('vscrollThumb');
+
+function updateScrollbar() {
+  const name = current();
+  const overflowing = name !== 'main' && name !== 'NowPlaying' && content.scrollHeight > content.clientHeight + 1;
+  vscrollEl.classList.toggle('show', overflowing);
+  if (!overflowing) return;
+
+  // Measured from #content's actual rendered box, not a second calc()
+  // formula mirroring .screen-head's height — two separate calc()
+  // expressions can round to different subpixels at some widths, which is
+  // exactly what let the track creep over the header/bottom edge.
+  const screenRect = screenEl.getBoundingClientRect();
+  const contentRect = content.getBoundingClientRect();
+  const trackHeight = contentRect.height;
+  // top/left offsets for an absolutely positioned child are relative to the
+  // padding edge, i.e. inside the border — so the border width (clientTop)
+  // has to come out, or this sits exactly one border-width too low.
+  vscrollEl.style.top = (contentRect.top - screenRect.top - screenEl.clientTop) + 'px';
+  vscrollEl.style.height = trackHeight + 'px';
+
+  // Sized and positioned against the list's true total count, not how much
+  // has loaded so far — a thumb that keeps shrinking as more lazily loads
+  // in would misrepresent how much is actually left, which is exactly the
+  // "fully disclose the real size" problem with that pattern. Falls back to
+  // what's actually rendered for screens with no known total (Settings,
+  // About — short, fixed lists where this never even triggers in practice).
+  const key = keyForScreen(name);
+  const rowEl = content.querySelector('li');
+  const rowHeight = rowEl ? rowEl.getBoundingClientRect().height : trackHeight / 5;
+  const visibleRows = trackHeight / rowHeight;
+  const knownTotal = key && totals[key] != null
+    ? totals[key] + (key === 'playlists' ? 1 : 0) // +1 for the prepended Liked Songs row
+    : null;
+  const totalRows = knownTotal != null ? Math.max(knownTotal, itemsOf(name).length) : itemsOf(name).length;
+
+  const thumbHeight = Math.max(16, trackHeight * Math.min(1, visibleRows / totalRows));
+  // The thumb should only reach the very bottom once the selection reaches
+  // the true last row (totalRows - 1), not merely "visibleRows short of the
+  // end" — that earlier version hit 100% as soon as the LAST PAGE's worth
+  // of rows remained unseen, prematurely saying "done" while up to
+  // ~visibleRows items were still unrevealed. Barely noticeable on a huge
+  // lazily-loaded list (a few rows out of hundreds); glaring on a short one
+  // like Playlists (a few rows out of ten).
+  const maxIndex = Math.max(1, totalRows - 1);
+  const thumbTop = (trackHeight - thumbHeight) * Math.min(1, state.index / maxIndex);
+  vscrollThumb.style.height = thumbHeight + 'px';
+  vscrollThumb.style.top = thumbTop + 'px';
+}
+content.addEventListener('scroll', updateScrollbar);
+window.addEventListener('resize', updateScrollbar);
+
+function render() {
+  const name = current();
+  titleEl.textContent = titleOf(name);
+  if (name !== 'NowPlaying') clearNowPlayingTint();
+
+  if (name === 'NowPlaying') { renderNowPlaying(); updateScrollbar(); return; }
+  if (name === 'About') { renderInfo(); updateScrollbar(); return; }
+
+  const items = itemsOf(name);
+  if (state.index >= items.length) state.index = 0;
+
+  if (!items.length) {
+    content.innerHTML = errorHtml() + '<div class="now">Nothing here yet.</div>';
+    updateScrollbar();
+    return;
+  }
+
+  content.innerHTML = errorHtml() + '<ul class="list">' + items.map((item, i) => {
+    let right = '';
+    if (item.toggle) right = state.settings[item.toggle] ? 'On' : 'Off';
+    else if (item.theme) right = state.settings.theme === item.theme ? '✓' : '';
+    else if (item.to) right = '›';
+    // Playlists/Artists rows play directly (item.play) rather than
+    // navigating (item.to), which is why they had no chevron before even
+    // though Liked Songs — mixed into this same list — did. Individual
+    // Liked Songs tracks (item.play on the Songs screen) stay chevron-less;
+    // only the collection-level rows get one.
+    else if (item.play && (name === 'Playlists' || name === 'Artists')) right = '›';
+    return `<li class="${i === state.index ? 'sel' : ''}"><span>${esc(item.label)}</span><span class="chev">${right}</span></li>`;
+  }).join('') + '</ul>';
+
+  // Keep the highlighted row inside the visible part of the screen
+  // Scroll only the list, not the screen or the page
+  const sel = content.querySelector('li.sel');
+  if (sel) {
+    const cr = content.getBoundingClientRect();
+    const sr = sel.getBoundingClientRect();
+    if (sr.top < cr.top) content.scrollTop -= cr.top - sr.top;
+    else if (sr.bottom > cr.bottom) content.scrollTop += sr.bottom - cr.bottom;
+  }
+  updateScrollbar();
+
+  // Load library data the first time a library screen is opened
+  if (['Playlists', 'Artists', 'Songs'].includes(name)) {
+    loadLibrary(name.toLowerCase() === 'songs' ? 'tracks' : name.toLowerCase());
+    maybeLoadMore(name);
+  }
+}
+
+function renderInfo() {
+  const rows = [
+    ['Music Provider', 'Spotify'],
+    ['Status', tokens ? 'Connected' : 'Not connected'],
+  ];
+  content.innerHTML = errorHtml() + '<ul class="list">' + rows.map(([k, v]) =>
+    `<li><span>${esc(k)}</span><span class="chev">${esc(v)}</span></li>`
+  ).join('') + '</ul>';
+}
+
+function renderNowPlaying() {
+  if (!np.active) {
+    content.innerHTML = errorHtml() + '<div class="now">Nothing playing.</div>';
+    return;
+  }
+  const pct = np.duration ? Math.min(100, (np.position / np.duration) * 100) : 0;
+  content.innerHTML = errorHtml() + `
+    <div class="np">
+      <div class="np-top">
+        ${np.art ? `<img class="np-art" id="np-art" crossorigin="anonymous" src="${esc(np.art)}" alt="">` : '<div class="np-art"></div>'}
+        <div class="np-meta">
+          <div class="np-title"></div>
+          <div class="np-sub">${esc(np.artist)}</div>
+        </div>
+      </div>
+      <div class="np-bar"><div id="np-fill" style="width:${pct}%"></div></div>
+      <div class="np-time"><span id="np-pos">${fmt(np.position)}</span><span>${fmt(np.duration)}</span></div>
+      <div class="np-state">${np.paused ? '<span>❚❚</span><span>Paused</span>' : '<span>▶</span><span>Playing</span>'}</div>
+    </div>`;
+  startMarquee(content.querySelector('.np-title'), np.title);
+
+  const artEl = content.querySelector('#np-art');
+  if (!artEl) { clearNowPlayingTint(); return; }
+  artEl.onerror = clearNowPlayingTint;
+  if (artEl.complete) applyNowPlayingTint(artEl);
+  else artEl.onload = () => applyNowPlayingTint(artEl);
+}
+
+// ---------- Now Playing background tint ----------
+// Apple Music-style: the screen behind the Now Playing content is tinted
+// from the album art's own color instead of staying flat dark gray. No
+// extra network request — it reads pixels from the same <img> that's
+// already loading for display, via a small offscreen canvas (cheap: a few
+// ms, independent of the source image's real resolution). Shell/body color
+// (a separate, pending feature) is intentionally untouched by this.
+let lastTintArtUrl = null;
+let lastTintGradient = null;
+
+function applyNowPlayingTint(imgEl) {
+  const url = imgEl.src;
+  if (url === lastTintArtUrl && lastTintGradient) {
+    screenEl.style.background = lastTintGradient;
+    screenEl.classList.add('np-tint');
+    return;
+  }
+  try {
+    const SIZE = 12;
+    const canvas = document.createElement('canvas');
+    canvas.width = SIZE; canvas.height = SIZE;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(imgEl, 0, 0, SIZE, SIZE);
+    const data = ctx.getImageData(0, 0, SIZE, SIZE).data;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let p = 0; p < data.length; p += 4) { r += data[p]; g += data[p + 1]; b += data[p + 2]; n++; }
+    r /= n; g /= n; b /= n;
+
+    // Push the averaged color toward something moody and dark, like Apple
+    // Music's background, rather than the muddy mid-tone a flat average
+    // tends to produce — washed-out art shouldn't give a washed-out screen.
+    const [h, s, l] = rgbToHsl(r, g, b);
+    const [tr, tg, tb] = hslToRgb(h, Math.min(0.75, Math.max(0.35, s * 1.4)), Math.min(0.30, Math.max(0.16, l * 0.8)));
+    const gradient = `linear-gradient(180deg, rgb(${tr},${tg},${tb}) 0%, #101114 150%)`;
+
+    lastTintArtUrl = url;
+    lastTintGradient = gradient;
+    // The song (or screen) may have changed while this image was decoding.
+    if (np.active && np.art === url && current() === 'NowPlaying') {
+      screenEl.style.background = gradient;
+      screenEl.classList.add('np-tint');
+    }
+  } catch (e) {
+    clearNowPlayingTint(); // e.g. a CORS-tainted canvas — fall back quietly
+  }
+}
+
+function clearNowPlayingTint() {
+  screenEl.classList.remove('np-tint');
+  screenEl.style.background = '';
+}
+
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0; const l = (max + min) / 2;
+  const d = max - min;
+  if (d !== 0) {
+    s = d / (1 - Math.abs(2 * l - 1));
+    switch (max) {
+      case r: h = ((g - b) / d) % 6; break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return [h, s, l];
+}
+
+function hslToRgb(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+  let [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+    : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+}
+
+// Scrolls a truncated title into view, iPod/Spotify ticker-style: starts
+// flush-left and visible immediately (no slide-in), pauses, then scrolls
+// left at a constant speed forever. The title is duplicated with a gap so
+// the moment one copy exits past the left edge, the next copy is already
+// sliding in from the right — no reset, no snap, never a frame with nothing
+// visible. No-ops if the text already fits.
+function startMarquee(container, text) {
+  if (!container) return;
+  container.textContent = text;
+  const boxWidth = container.clientWidth;
+  const textWidth = container.scrollWidth;
+  if (textWidth <= boxWidth) return; // fits — stay static, no scroll
+
+  const SPEED = 20;  // px/s — constant scroll speed
+  const GAP = 40;    // px between the end of one copy and the start of the next
+  const period = textWidth + GAP;
+  const scrollMs = (period / SPEED) * 1000;
+
+  container.textContent = '';
+  const track = document.createElement('div');
+  track.style.cssText = 'display: inline-flex; white-space: nowrap;';
+  const seg1 = document.createElement('span');
+  seg1.textContent = text;
+  const seg2 = document.createElement('span');
+  seg2.textContent = text;
+  const gap = document.createElement('span');
+  gap.style.cssText = `display: inline-block; width: ${GAP}px; flex-shrink: 0;`;
+  track.append(seg1, gap, seg2);
+  container.appendChild(track);
+
+  function scroll() {
+    if (!track.isConnected) return;
+    track.style.transition = `transform ${scrollMs}ms linear`;
+    track.style.transform = `translateX(-${period}px)`;
+  }
+  track.addEventListener('transitionend', () => {
+    if (!track.isConnected) return;
+    // The second copy is now exactly where the first started — the reset
+    // itself is visually seamless (title is back in its original place).
+    track.style.transition = 'none';
+    track.style.transform = 'translateX(0)';
+    void track.offsetWidth;
+    setTimeout(() => { // pause here, readable, before scrolling again
+      if (track.isConnected) scroll();
+    }, 1500);
+  });
+
+  setTimeout(scroll, 1500); // initial pause before the very first lap only
+}
+
+// Update only the progress bar and time, so the album art does not reload every second
+function updateProgress() {
+  const fill = document.getElementById('np-fill');
+  const pos = document.getElementById('np-pos');
+  if (!fill || !pos) return renderNowPlaying();
+  fill.style.width = (np.duration ? Math.min(100, (np.position / np.duration) * 100) : 0) + '%';
+  pos.textContent = fmt(np.position);
+}
+
+// ---------- Navigation ----------
+function go(name) {
+  currentFrame().index = state.index;
+  state.stack.push({ name, index: 0 });
+  state.index = 0;
+  state.error = '';
+  render();
+}
+
+function back() {
+  if (state.stack.length > 1) {
+    state.stack.pop();
+    state.index = currentFrame().index;
+    state.error = '';
+    render();
+  }
+}
+
+function move(delta) {
+  const name = current();
+  const items = itemsOf(name);
+  if (!items.length) return;
+  const prevIndex = state.index;
+  const key = keyForScreen(name);
+  const next = prevIndex + delta;
+
+  if (key && nextUrls[key] && next >= items.length) {
+    // More of this list is still loading (or about to start, via the
+    // maybeLoadMore() call at the end of render()) — hold at the last
+    // loaded row instead of wrapping to the top, so scrolling fast can't
+    // snap back to the start before the next page has actually arrived.
+    state.index = items.length - 1;
+  } else {
+    state.index = (next + items.length) % items.length;
+  }
+  if (state.index !== prevIndex) playClick();
+  render();
+}
+
+// ---------- Click sound ----------
+// Synthesized, not a file: a short burst of noise through a bandpass filter,
+// like the real click wheel's feedback tick. The AudioContext is created
+// lazily here, the first time this actually runs — which is always inside a
+// user-gesture call stack (move() is only ever called from pointer/keyboard
+// handlers), so this never runs into the browser's autoplay block.
+let audioCtx = null;
+
+function playClick() {
+  if (!state.settings.clicks) return;
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  const ctx = audioCtx;
+  const now = ctx.currentTime;
+  const duration = 0.012; // ~12ms noise burst
+
+  const buffer = ctx.createBuffer(1, Math.max(1, Math.round(ctx.sampleRate * duration)), ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 3000; // 2-4kHz click character
+  filter.Q.value = 1.2;
+
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.18, now); // low volume (0.15 + 20%)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration); // fast decay
+
+  noise.connect(filter).connect(gain).connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + duration);
+}
+
+// ---------- Select ----------
+function select() {
+  if (current() === 'NowPlaying') {
+    return demoMode ? demoCall(() => demoController.togglePlay()) : playerCall(() => player.togglePlay());
+  }
+
+  const item = itemsOf(current())[state.index];
+  if (!item) return;
+
+  if (item.to) return go(item.to);
+  if (item.toggle) {
+    state.settings[item.toggle] = !state.settings[item.toggle];
+    render();
+    if (item.toggle === 'shuffle' || item.toggle === 'repeat') syncModes();
+    return;
+  }
+  if (item.theme) {
+    state.settings.theme = item.theme;
+    applyTheme(item.theme);
+    render();
+    return;
+  }
+  if (item.action) return item.action();
+  if (item.play) {
+    // Shown in the Now Playing header in place of "Now Playing" — only for
+    // Playlists/Artists, where there's an actual named collection you're
+    // playing from. Anything else (a single Liked Song) falls back to the
+    // default, rather than leaving a stale name from a previous selection.
+    const name = current();
+    np.source = (name === 'Playlists' || name === 'Artists') ? item.label : null;
+    return playSpec(item.play);
+  }
+}
+
+// ---------- Shell color ----------
+// Derives a lighter/darker pair from one base hex for .ipod's existing
+// top-to-bottom gradient (--body-hi/--body-lo), so each color in
+// SHELL_COLORS only needs one hex value.
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+}
+
+function applyShellColor(hex) {
+  const [h, s, l] = rgbToHsl(...hexToRgb(hex));
+  const hi = rgbToHex(...hslToRgb(h, s, Math.min(0.95, l + 0.12)));
+  const lo = rgbToHex(...hslToRgb(h, s, Math.max(0.15, l - 0.12)));
+  ipodEl.style.setProperty('--body-hi', hi);
+  ipodEl.style.setProperty('--body-lo', lo);
+}
+
+// The childhood stickers are purely cosmetic to that one specific shell —
+// Apple White (the default) and every other color stay sticker-free.
+function applyStickers(shellId) {
+  ipodEl.classList.toggle('childhood', shellId === 'childhood');
+}
+
+// ---------- Light/Dark Mode (Settings > Display) ----------
+// Sets [data-theme] on <html>, which the :root[data-theme="light"] CSS
+// block overrides — covers the LCD screen's own colors (background, text,
+// dividers, header, scrollbar). The shell/wheel (applyShellColor) and a
+// tinted Now Playing screen (always dark, regardless of theme — see the
+// .screen.np-tint overrides in CSS) are deliberately untouched by this.
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+}
+
+// External control, on the page itself rather than in the device's own
+// Settings menu — a row of circular swatch buttons below the footer.
+const shellPicker = document.getElementById('shellPicker');
+const shellColorNameEl = document.getElementById('shellColorName');
+
+// A tiny blocky pixel-art smiley (7x7 grid, crisp square edges, no
+// anti-aliasing) marking the childhood-iPod swatch specifically — it's
+// otherwise the exact same white as the plain Apple White swatch.
+const PIXEL_SMILEY = `<svg viewBox="0 0 7 7" shape-rendering="crispEdges" aria-hidden="true">
+  <rect x="1" y="1" width="1" height="2" fill="#000"/>
+  <rect x="5" y="1" width="1" height="2" fill="#000"/>
+  <rect x="0" y="4" width="1" height="1" fill="#000"/>
+  <rect x="6" y="4" width="1" height="1" fill="#000"/>
+  <rect x="1" y="5" width="5" height="1" fill="#000"/>
+</svg>`;
+
+function renderShellPicker() {
+  shellPicker.innerHTML = SHELL_COLORS.map(c => {
+    const selected = c.id === state.settings.shellId;
+    const face = c.id === 'childhood' ? PIXEL_SMILEY : '';
+    return `<button class="shell-swatch${selected ? ' selected' : ''}" style="background:${esc(c.hex)}" data-id="${esc(c.id)}" aria-label="${esc(c.label)}" title="${esc(c.label)}">${face}</button>`;
+  }).join('');
+  const active = SHELL_COLORS.find(c => c.id === state.settings.shellId);
+  shellColorNameEl.textContent = active ? active.label : '';
+}
+
+shellPicker.addEventListener('click', e => {
+  const btn = e.target.closest('[data-id]');
+  if (!btn) return;
+  const entry = SHELL_COLORS.find(c => c.id === btn.dataset.id);
+  if (!entry) return;
+  state.settings.shellId = entry.id;
+  applyShellColor(entry.hex);
+  applyStickers(entry.id);
+  renderShellPicker();
+});
+
+// ---------- Buttons ----------
+document.querySelectorAll('[data-act]').forEach(el => {
+  el.addEventListener('click', () => {
+    const onNP = current() === 'NowPlaying';
+    switch (el.dataset.act) {
+      // 'prev'/'next' off the Now Playing screen fall through to move(), which
+      // already clicks on its own when the selection actually changes — so
+      // only click here for the paths that don't go through move(), to avoid
+      // a doubled-up click.
+      case 'menu':   playClick(); return back();
+      // Demo Now Playing has no skip control to call — Spotify's embed
+      // iFrame API doesn't expose a next/previous track method (confirmed
+      // against its docs: loadUri/play/pause/resume/togglePlay/restart/
+      // seek/destroy is the full list). The button still clicks, it just
+      // can't do anything in demo mode.
+      case 'prev':   if (onNP) { playClick(); if (!demoMode) return playerCall(() => player.previousTrack()); return; } return move(-1);
+      case 'next':   if (onNP) { playClick(); if (!demoMode) return playerCall(() => player.nextTrack()); return; } return move(1);
+      case 'play':   playClick(); return demoMode ? demoCall(() => demoController.togglePlay()) : playerCall(() => player.togglePlay());
+      case 'select': playClick(); return select();
+    }
+  });
+});
+
+// Advance the progress bar once per second while playing
+setInterval(() => {
+  if (!np.active || np.paused) return;
+  np.position = Math.min(np.duration, np.position + 1);
+  if (current() === 'NowPlaying') updateProgress();
+}, 1000);
+
+// ---------- Click wheel: drag around the ring to scroll ----------
+const wheel = document.getElementById('wheel');
+let dragging = false;
+let lastAngle = 0;
+let accum = 0;
+const STEP = 28; // degrees per list item
+
+function angleFrom(e) {
+  const r = wheel.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  return Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
+}
+function inRing(e) {
+  const r = wheel.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  const d = Math.hypot(e.clientX - cx, e.clientY - cy);
+  return d > r.width * 0.2 && d < r.width * 0.5;
+}
+
+wheel.addEventListener('pointerdown', e => {
+  if (e.target.closest('[data-act]')) return;
+  if (!inRing(e)) return;
+  dragging = true;
+  lastAngle = angleFrom(e);
+  accum = 0;
+  wheel.setPointerCapture(e.pointerId);
+});
+
+wheel.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const a = angleFrom(e);
+  let d = a - lastAngle;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  lastAngle = a;
+  accum += d;
+  while (accum >= STEP) { move(1); accum -= STEP; }
+  while (accum <= -STEP) { move(-1); accum += STEP; }
+});
+
+const stopDrag = () => { dragging = false; };
+wheel.addEventListener('pointerup', stopDrag);
+wheel.addEventListener('pointercancel', stopDrag);
+
+// ---------- Keyboard ----------
+document.addEventListener('keydown', e => {
+  const onNP = current() === 'NowPlaying';
+  switch (e.key) {
+    case 'ArrowUp':    e.preventDefault(); move(-1); break;
+    case 'ArrowDown':  e.preventDefault(); move(1); break;
+    case 'ArrowLeft':  e.preventDefault(); if (!onNP) move(-1); else if (!demoMode) playerCall(() => player.previousTrack()); break;
+    case 'ArrowRight': e.preventDefault(); if (!onNP) move(1); else if (!demoMode) playerCall(() => player.nextTrack()); break;
+    case ' ':          e.preventDefault(); demoMode ? demoCall(() => demoController.togglePlay()) : playerCall(() => player.togglePlay()); break;
+    case 'Enter':      select(); break;
+    case 'Escape':
+    case 'Backspace':  back(); break;
+  }
+});
+
+// ---------- Boot ----------
+// ---------- First-visit acknowledgement ----------
+const demoNoticeEl = document.getElementById('demoNotice');
+
+function dismissDemoNotice() {
+  demoNoticeEl.hidden = true;
+  try { localStorage.setItem(DEMO_NOTICE_KEY, '1'); } catch {}
+}
+
+document.getElementById('noticeContinue').addEventListener('click', dismissDemoNotice);
+
+(async function boot() {
+  applyShellColor(SHELL_COLORS.find(c => c.id === state.settings.shellId).hex);
+  applyStickers(state.settings.shellId);
+  applyTheme(state.settings.theme);
+  renderShellPicker();
+  let noticeAcked = false;
+  try { noticeAcked = localStorage.getItem(DEMO_NOTICE_KEY) === '1'; } catch {}
+  if (!noticeAcked) demoNoticeEl.hidden = false;
+  const params = new URLSearchParams(location.search);
+  if (params.get('error')) state.error = 'Spotify login was cancelled.';
+  const code = params.get('code');
+  if (code) {
+    history.replaceState(null, '', REDIRECT_URI);
+    try {
+      await exchangeCode(code);
+      initPlayer();
+    } catch {
+      state.error = 'Login failed. Try connecting again.';
+    }
+  }
+  render();
+})();
+</script>
+
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
+</body>
+</html>

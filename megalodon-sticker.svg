@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 312 312" width="312" height="312">
+  <defs>
+    <filter id="wobble" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="2" seed="31" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="7.2" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#wobble)" stroke="#14171c" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round">
+    <!-- tail (caudal fin) -->
+    <path d="M248 132 C264 104 280 76 300 56 C292 100 284 124 268 152 C276 172 280 192 280 212 C268 196 256 184 248 172 Z" fill="#46566a"/>
+    <!-- pectoral fin -->
+    <path d="M126 176 C108 186 92 200 82 214 C100 204 114 196 134 190 Z" fill="#46566a"/>
+    <!-- second dorsal fin, near the tail -->
+    <path d="M216 130 C220 120 223.2 114 226 110 C228 118 232 124 238 130 Z" fill="#46566a"/>
+    <!-- two pelvic fins on the underside -->
+    <path d="M136 188 C134 200 134 210 140 214 C146 206 150 198 156 192 Z" fill="#46566a"/>
+    <path d="M168 192 C170 202 172 210 178 214 C182 206 186 200 188 192 Z" fill="#46566a"/>
+    <!-- anal fin, low by the tail -->
+    <path d="M224 176 C226 184 228 190 232 194 C235.2 188 236.8 182 238 178 Z" fill="#46566a"/>
+    <!-- body: one flat color -->
+    <path d="M24 160 C40 136 80 120 120 116 C160 112 200 120 248 132 L248 172 C208 188 168 196 120 188 C80 184 48 176 24 160 Z" fill="#6e8196"/>
+    <!-- white belly: flat, hard edge along the top -->
+    <path d="M24 160 C56 164 96 168 136 164 C176 160 208 160 248 172 C208 188 168 196 120 188 C80 184 48 176 24 160 Z" fill="#ffffff"/>
+    <!-- dorsal fin -->
+    <path d="M128 116 C136 100 152 84 172 76 C176 92 184 104 192 116 Z" fill="#46566a"/>
+    <!-- gill slits -->
+    <g fill="none" stroke-width="3.2" stroke="#2a3442">
+      <path d="M100 132 Q106 150 100 168"/>
+      <path d="M112 132 Q118 150 112 168"/>
+      <path d="M124 132 Q130 150 124 168"/>
+      <path d="M136 132 Q142 150 136 168"/>
+      <path d="M148 132 Q154 150 148 168"/>
+    </g>
+    <!-- mouth line -->
+    <path d="M24 160 Q48 174 88 170" fill="none" stroke-width="4"/>
+    <!-- teeth -->
+    <g fill="#FFFFFF" stroke-width="2">
+      <path d="M32 164.8 L38.4 180 L44 166.4 Z"/>
+      <path d="M48 168 L54.4 182.4 L60 169.6 Z"/>
+      <path d="M64 169.6 L70.4 184 L76 171.6 Z"/>
+      <path d="M80 170.4 L85.6 182.4 L90.4 172 Z"/>
+    </g>
+    <!-- eye with highlight -->
+    <circle cx="64" cy="144" r="6" fill="#14171c" stroke="none"/>
+    <circle cx="62" cy="142" r="2" fill="#ffffff" stroke="none"/>
+  </g>
+</svg>

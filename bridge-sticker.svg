@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="2 12 96 34" width="96" height="34">
+  <defs>
+    <filter id="wobble" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="3" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="1.4" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#wobble)" fill="#D9482B" stroke="#D9482B" stroke-linecap="round">
+    <!-- towers -->
+    <rect x="29" y="14" width="4" height="34"/>
+    <rect x="67" y="14" width="4" height="34"/>
+    <rect x="27.5" y="22" width="7" height="2" stroke="none"/>
+    <rect x="27.5" y="32" width="7" height="2" stroke="none"/>
+    <rect x="65.5" y="22" width="7" height="2" stroke="none"/>
+    <rect x="65.5" y="32" width="7" height="2" stroke="none"/>
+    <!-- main cables, anchored at the deck ends and resting on the tower tops -->
+    <path d="M6 42 Q18 17 31 14 Q50 52 69 14 Q82 17 94 42" fill="none" stroke-width="1.6"/>
+    <!-- hangers: each runs from the cable down to the deck -->
+    <g stroke-width=".8">
+      <line x1="12.1" y1="30.9" x2="12.1" y2="42"/>
+      <line x1="18.3" y1="22.5" x2="18.3" y2="42"/>
+      <line x1="24.6" y1="16.9" x2="24.6" y2="42"/>
+      <line x1="35.8" y1="22.3" x2="35.8" y2="42"/>
+      <line x1="40.5" y1="28.3" x2="40.5" y2="42"/>
+      <line x1="45.3" y1="31.8" x2="45.3" y2="42"/>
+      <line x1="50" y1="33" x2="50" y2="42"/>
+      <line x1="54.8" y1="31.8" x2="54.8" y2="42"/>
+      <line x1="59.5" y1="28.3" x2="59.5" y2="42"/>
+      <line x1="64.3" y1="22.3" x2="64.3" y2="42"/>
+      <line x1="75.4" y1="16.9" x2="75.4" y2="42"/>
+      <line x1="81.8" y1="22.5" x2="81.8" y2="42"/>
+      <line x1="87.9" y1="30.9" x2="87.9" y2="42"/>
+    </g>
+    <!-- deck -->
+    <line x1="4" y1="42" x2="96" y2="42" stroke-width="2.6"/>
+  </g>
+</svg>
